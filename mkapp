@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -e
+set -x
+
+env
+
+. /usr/share/mkapp/functions
+
+echo "deb-src http://httpredir.debian.org/debian ${DIST} main" >> /etc/apt/sources.list
+
+apt-get update
+apt-get source -y libwebsockets
+
+cd libwebsockets-*
+
+sed -i -e 's/-DLIB_SUFFIX/-DLWS_IPV6=ON -DLIB_SUFFIX/g' debian/rules
+cat debian/rules
+
+sed -i -e '1p' debian/changelog
+sed -i -e '1s/)/+peramic0)/' -e "2i\\\n  * Enables IPv6\\n\\n -- peraMIC <opensource@peraMIC.io>  $(date -R)\\n" debian/changelog
+head -6 debian/changelog
+
+cd -
+
+for arch in $ARCH; do
+  apt-get -y build-dep -a${arch} libwebsockets
+  apt-get install -y libc6:${arch}
+  cd -
+  DEB_BUILD_OPTIONS=nocheck dpkg-buildpackage -B -j12 -a${arch} -i -I -Itarget --no-sign
+  cd -
+done
+
+mkdir target
+mv *_*.* target
+
+if [ "$PUBLISH" ]; then
+  publish_debs
+fi
